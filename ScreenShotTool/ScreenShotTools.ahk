@@ -112,9 +112,9 @@ class ScreenShotTool
         {
             ; Capture the Area choosen by the user
             coords := coords ? coords : this._markArea()
-            pBitmap := Gdip_BitmapFromScreen(coords)
-            this._flash()
-            this._shutter()
+            ; pBitmap := Gdip_BitmapFromScreen(coords)
+            ; this._flash()
+            ; this._shutter()
         } else if (type == "LastArea")
         {
             ; Capture the last Area choosen by the user
@@ -421,104 +421,118 @@ class ScreenShotTool
      */
     _markArea()
     {
-        Loop
+        this._selection := "none"
+        this.timer := ObjBindMethod(this, "_trackMovement")
+        timer := this.timer
+        SetTimer % timer, 2
+    }
+
+    _trackMovement()
+    {
+        static snX, snY, lastnX, lastnY, _selection
+        static ScreenRulerY, ScreenRulerX, ScreenRulerSY, ScreenRulerSX
+
+        counter := 0
+        ClickThrough := "+0x80020"
+
+        SysGet, MonitorAreaLeft, 76
+        SysGet, MonitorAreaTop, 77
+        SysGet, MonitorAreaWidth, 78
+        SysGet, MonitorAreaHeight, 79
+        SysGet, WorkAreaPrimary, MonitorWorkArea
+        WorkAreaPrimaryWidth := WorkAreaPrimaryRight - WorkAreaPrimaryLeft
+        WorkAreaPrimaryHeight := WorkAreaPrimaryBottom - WorkAreaPrimaryTop
+
+        SetWindelay, 2
+        Coordmode, Mouse, Screen
+        Coordmode, Tooltip, Screen
+        MouseGetPos, nX, nY
+
+        ; Bewegliche Linie klein erzeugen
+        Splashimage,3:, B H3 W0 X0 Y0 CWe1372d,,,ScreenRulerY
+        WinSet, Transparent, 225, ScreenRulerY
+        ; WinSet, ExStyle, %ClickThrough%, ScreenRulerY
+        Splashimage,4:, B H0 W3 X0 Y0 CWe1372d,,,ScreenRulerX
+        WinSet, Transparent, 225, ScreenRulerX
+        ; WinSet, ExStyle, %ClickThrough%, ScreenRulerX
+
+        If (nX != this.lastnX OR nY != this.lastnY)
         {
-            if (GetKeyState("Escape", "p") == "D")
+            WinMove, ScreenRulerY,,%MonitorAreaLeft%, %nY%, %MonitorAreaWidth%
+            WinMove, ScreenRulerX,, %nX%,%MonitorAreaTop%,,%MonitorAreaHeight%
+            nX1 := nX-MonitorAreaLeft+1-8/2
+            nX2 := nX-MonitorAreaLeft+1+8/2
+            nY1 := nY-MonitorAreaTop+1-8/2
+            nY2 := nY-MonitorAreaTop+1+8/2
+            if (nX != lastnX)
+                WinSet, Region,0-0 %MonitorAreaWidth%-0 %MonitorAreaWidth%-3 0-3 0-0  %nX1%-0 %nX2%-0 %nX2%-3 %nX1%-3 %nX1%-0,ScreenRulerY
+            if (nY != lastnY)
+                WinSet, Region,0-0 0-%MonitorAreaHeight% 3-%MonitorAreaHeight% 3-0 0-0  0-%nY1% 0-%nY2% 3-%nY2% 3-%nY1% 0-%nY1%,ScreenRulerX
+            WinSet, Top,, ScreenRulerX
+            WinSet, Top,, ScreenRulerY
+            WinSet, Top,, ScreenRulerSX
+            WinSet, Top,, ScreenRulerSY
+        }
+
+
+        if ((GetKeyState("LButton") == "D") AND (this._selection == "none")) {   ; User clicked Mouse1
+            this._selection := "first"
+            Coordmode, Mouse, Screen
+            MouseGetPos, snX, snY
+            this.snX := snX
+            this.snY := snY
+
+            Splashimage,5:, B H3 W%MonitorAreaWidth% X%MonitorAreaLeft% Y%snY% CWe1372d,,,ScreenRulerSY
+            WinSet, Transparent, 225, ScreenRulerSY
+            WinMove, ScreenRulerSY,,,,%MonitorAreaWidth%
+            ; WinSet, ExStyle, %ClickThrough%, ScreenRulerSY
+            Splashimage,6:, B H%MonitorAreaHeight% W3 X%snX% Y%MonitorAreaTop% CWe1372d,,,ScreenRulerSX
+            WinSet, Transparent, 225, ScreenRulerSX
+            WinMove, ScreenRulerSX,,,,,%MonitorAreaHeight%
+            ; WinSet, ExStyle, %ClickThrough%, ScreenRulerSX
+        }
+
+        if ((GetKeyState("LButton") == "U") AND (this._selection == "first")) {   ; User clicked Mouse1
+            timer := this.timer
+            SetTimer % timer, Off
+            Splashimage,3:Off
+            Splashimage,4:Off
+            Splashimage,5:Off
+            Splashimage,6:Off
+            ToolTip,,,,4
+            this.Remove("snX")
+            this.Remove("snY")
+            this.Remove("lastnX")
+            this.Remove("lastnY")
+            this._selection := "none"
+            return
+        }
+
+        if (this._selection == "first") {        ; User defining the start position
+            nX := StringRight("     " nX, 5)
+            nY := StringRight("     " nY, 5)
+            ToolTipAdd := "Width: " StringRight("     " nX-this.snX, 6) "`nHeight: " StringRight("     " nY-this.snY, 6)
+            ; ToolTipAdd := StringTrimLeft(ToolTipAdd, 1)
+
+            If (ToolTipAdd != this.LastToolTip OR nX != this.lastnX OR nY != this.lastnY))
             {
-                Gui, % this.tmpGuiNum0 ": Destroy"
-                Gui, % this.tmpGuiNum ": Destroy"
-                this.Remove("tmpMX")
-                this.Remove("tmpMY")
-                this.Remove("tmpGuiNum")
-                this.Remove("tmpGuiNum0")
-                this.Remove("tmpGuiNum1")
-                this.Remove("tmpState")
-                return false
-            }
-            if(!this.tmpState)
-            {
-                this.tmpState := 1
-                ;Credits of code below go to sumon/Learning one
-                CoordMode, Mouse ,Screen
-                this.tmpGuiNum0 := GetFreeGUINum(10)
-                Gui % this.tmpGuiNum0 ": Default"
-                Gui, +AlwaysOnTop -caption -Border +ToolWindow +LastFound
-                Gui, Color, White
-                Gui, Font, s50 c0x5090FF, Verdana
-                Gui, Add, Text, % "x0 y" (A_ScreenHeight/10) " w" A_ScreenWidth " Center", Drag a rectangle around the area you want to capture!
-                WinSet, TransColor, White
-                this.tmpGuiNum := GetFreeGUINum(10)
-                Gui % this.tmpGuiNum ": Default"
-                SysGet, VirtualX, 76
-                SysGet, VirtualY, 77
-                SysGet, VirtualW, 78
-                SysGet, VirtualH, 79
-                Gui, +AlwaysOnTop -caption +Border +ToolWindow +LastFound
-                WinSet, Transparent, 1
-                Gui % this.tmpGuiNum0 ":Show", X%VirtualX% Y%VirtualY% W%VirtualW% H%VirtualH%
-                Gui, Show, X%VirtualX% Y%VirtualY% W%VirtualW% H%VirtualH%
-                this.tmpGuiNum1 := GetFreeGUINum(10)
-                Gui % this.tmpGuiNum1 ": Default"
-                Gui, +AlwaysOnTop -caption +Border +ToolWindow +LastFound
-                WinSet, Transparent, 120
-                Gui, Color, 0x5090FF
-                continue
-            }
-            else if(this.tmpState = 1) ;Wait for mouse down
-            {
-                if (GetKeyState("LButton", "p") == "D")
-                {
-                    this.tmpState := 2
-                    MouseGetPos, MX, MY
-                    this.tmpMX := MX
-                    this.tmpMY := MY
+                ; Position und Größe des ToolTips
+                WinGetPos, ttX, ttY, ttW, ttH, ahk_class tooltips_class32
+
+                ; Setze die Position des ToolTips abhängig von der Mausposition
+                ; zweiter Teil ist notwendig beim MultiMonitor Betrieb mit zwei Monitorn untereinander
+                If (nY > MonitorAreaBottom - ttH - 15 OR (nY > WorkAreaPrimaryBottom - ttH - 15 AND nY < WorkAreaPrimaryBottom)) {
+                    RulerPosY := nY - ttH - 15
+                } Else {
+                    RulerPosY := nY + 15
                 }
-                continue
-            }
-            else if(this.tmpState = 2) ;Dragging
-            {
-                MouseGetPos, MXend, MYend
-                w := abs(this.tmpMX - MXend)
-                h := abs(this.tmpMY - MYend)
-                If ( this.tmpMX < MXend )
-                    X := this.tmpMX
-                Else
-                    X := MXend
-                If ( this.tmpMY < MYend )
-                    Y := this.tmpMY
-                Else
-                    Y := MYend
-                Gui, % this.tmpGuiNum1 ": Show", x%X% y%Y% w%w% h%h%
-                if(GetKeyState("LButton", "p") == "D") ;Resize selection rectangle
-                   continue
-                else ;Mouse release
-                {
-                    Gui, % this.tmpGuiNum1 ": Destroy"
-                    If ( this.tmpMX > MXend )
-                    {
-                       temp := this.tmpMX
-                       this.tmpMX := MXend
-                       MXend := temp
-                    }
-                    If ( this.tmpMY > MYend )
-                    {
-                       temp := this.tmpMY
-                       this.tmpMY := MYend
-                       MYend := temp
-                    }
-                    Gui, % this.tmpGuiNum0 ": Destroy"
-                    Gui, % this.tmpGuiNum ": Destroy"
-                    this.lastArea := this.tmpMX "|" this.tmpMY "|" w "|" h
-                    this.Remove("tmpMX")
-                    this.Remove("tmpMY")
-                    this.Remove("tmpGuiNum")
-                    this.Remove("tmpGuiNum0")
-                    this.Remove("tmpGuiNum1")
-                    this.Remove("tmpState")
-                    WriteDebug("ScreenShot: user selected area: " this.lastArea)
-                    return this.lastArea
-                }
-            }
+                RulerPosX := nX + 15
+                ToolTip, %ToolTipAdd%, %RulerPosX%, %RulerPosY%, 4
+                this.LastToolTip := ToolTipAdd
+            ; }
+
+            this.lastnX := nX
+            this.lastnY := nY
         }
     }
 
